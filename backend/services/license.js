@@ -95,11 +95,19 @@ async function isBlacklisted(mac) {
 }
 
 async function onlineValidate() {
-  const productKey = process.env.PRODUCT_KEY;
+  let productKey = process.env.PRODUCT_KEY;
+
+  if (!productKey) {
+    productKey = getLicenseKey();
+    if (productKey) {
+      process.env.PRODUCT_KEY = productKey;
+    }
+  }
+
   const apiUrl = process.env.LICENSE_API_URL || 'http://localhost/api';
 
   if (!productKey) {
-    throw new Error('PRODUCT_KEY not set in .env');
+    throw new Error('PRODUCT_KEY_NOT_SET');
   }
 
   const mac = getMacAddress();
@@ -153,4 +161,66 @@ function getLicenseKey() {
   return null;
 }
 
-module.exports = { getMacAddress, getMachineFingerprint, generateKey, generateLicenseKey, validateLicense, loadLicense, saveLicense, getLicenseStatus, isBlacklisted, getLicenseKey, getLicensePath, onlineValidate };
+async function registerProductKey(productKey) {
+  const apiUrl = process.env.LICENSE_API_URL || 'http://localhost/api';
+  const mac = getMacAddress();
+
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({ key: productKey, mac });
+    const url = new URL(apiUrl.replace(/\/+$/, '') + '/register.php');
+
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request({
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout: 10000
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(body);
+          if (result.valid || result.message === 'Already registered') {
+            resolve(result);
+          } else {
+            reject(new Error(result.error || 'Registration failed'));
+          }
+        } catch {
+          reject(new Error('Invalid response from license server'));
+        }
+      });
+    });
+
+    req.on('error', () => reject(new Error('Cannot reach license server (check internet)')));
+    req.on('timeout', () => { req.destroy(); reject(new Error('License server timeout')); });
+    req.write(data);
+    req.end();
+  });
+}
+
+async function promptProductKey() {
+  const readline = require('readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  return new Promise((resolve) => {
+    console.log('\n╔══════════════════════════════════════════════╗');
+    console.log('║     PIXEL ART POS — License Activation      ║');
+    console.log('╠══════════════════════════════════════════════╣');
+    console.log('║  No product key found.                       ║');
+    console.log('║  Enter the key provided by your vendor       ║');
+    console.log('║  to activate this server.                    ║');
+    console.log('╚══════════════════════════════════════════════╝\n');
+    rl.question('  Product Key: ', (answer) => {
+      rl.close();
+      resolve(answer.trim().toUpperCase());
+    });
+  });
+}
+
+module.exports = { getMacAddress, getMachineFingerprint, generateKey, generateLicenseKey, validateLicense, loadLicense, saveLicense, getLicenseStatus, isBlacklisted, getLicenseKey, getLicensePath, onlineValidate, registerProductKey, promptProductKey };

@@ -38,7 +38,7 @@ const priceTierRoutes = require('./routes/price-tiers');
 const licenseRoutes = require('./routes/license');
 const { requireLicense } = require('./middleware/license');
 const { printReceipt, getPrinters } = require('./services/printer');
-const { onlineValidate } = require('./services/license');
+const { onlineValidate, promptProductKey, registerProductKey, saveLicense } = require('./services/license');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -107,10 +107,29 @@ async function start(port) {
       await onlineValidate();
       console.log('  ✓ License validated online');
     } catch (err) {
-      console.error(`\n\x1b[31m⚠ License Validation Failed!\x1b[0m`);
-      console.error(`  ${err.message}`);
-      console.error(`  Make sure the server has internet access and PRODUCT_KEY is correct.\n`);
-      process.exit(1);
+      if (err.message === 'PRODUCT_KEY_NOT_SET') {
+        // First run — prompt user for product key
+        const key = await promptProductKey();
+        if (!key) {
+          console.error('\n  No key entered. Server cannot start without a license.\n');
+          process.exit(1);
+        }
+        try {
+          await registerProductKey(key);
+          saveLicense(key);
+          process.env.PRODUCT_KEY = key;
+          console.log('  ✓ Product key activated and saved!\n');
+        } catch (regErr) {
+          console.error(`\n  ✗ Activation failed: ${regErr.message}`);
+          console.error('  Check that the key is correct and internet is available.\n');
+          process.exit(1);
+        }
+      } else {
+        console.error(`\n\x1b[31m⚠ License Validation Failed!\x1b[0m`);
+        console.error(`  ${err.message}`);
+        console.error(`  Make sure the server has internet access and PRODUCT_KEY is correct.\n`);
+        process.exit(1);
+      }
     }
   }
 

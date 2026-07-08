@@ -9,11 +9,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// InfinityFree MySQL credentials
-define('DB_HOST', 'sqlXXX.infinityfree.com');
-define('DB_NAME', 'if0_42362043_pos');
-define('DB_USER', 'if0_42362043');
-define('DB_PASS', 'posserver');
+// InfinityFree MySQL credentials — set these before uploading
+define('DB_HOST', 'sql303.infinityfree.com');
+define('DB_NAME', 'if0_42362433_pos_system');
+define('DB_USER', 'if0_42362433');
+define('DB_PASS', 'freeapppos');
 
 function getDB() {
     try {
