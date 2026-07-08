@@ -38,6 +38,7 @@ const priceTierRoutes = require('./routes/price-tiers');
 const licenseRoutes = require('./routes/license');
 const { requireLicense } = require('./middleware/license');
 const { printReceipt, getPrinters } = require('./services/printer');
+const { onlineValidate } = require('./services/license');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -99,6 +100,19 @@ function getLanIp() {
 
 async function start(port) {
   const p = port || PORT;
+
+  // Online license validation (always-online mode)
+  if (process.env.SKIP_LICENSE !== 'true') {
+    try {
+      await onlineValidate();
+      console.log('  ✓ License validated online');
+    } catch (err) {
+      console.error(`\n\x1b[31m⚠ License Validation Failed!\x1b[0m`);
+      console.error(`  ${err.message}`);
+      console.error(`  Make sure the server has internet access and PRODUCT_KEY is correct.\n`);
+      process.exit(1);
+    }
+  }
 
   // Test DB connection with a helpful error
   try {

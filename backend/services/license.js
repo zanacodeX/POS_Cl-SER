@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 
 const SECRET = 'PIXEL-ART-POS-V2-SECRET-KEY-2026';
 
@@ -92,6 +94,57 @@ async function isBlacklisted(mac) {
   } catch { return false; }
 }
 
+async function onlineValidate() {
+  const productKey = process.env.PRODUCT_KEY;
+  const apiUrl = process.env.LICENSE_API_URL || 'http://localhost/api';
+
+  if (!productKey) {
+    throw new Error('PRODUCT_KEY not set in .env');
+  }
+
+  const mac = getMacAddress();
+
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify({ key: productKey, mac });
+    const url = new URL(apiUrl.replace(/\/+$/, '') + '/validate.php');
+
+    const client = url.protocol === 'https:' ? https : http;
+    const options = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout: 10000
+    };
+
+    const req = client.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(body);
+          if (result.valid) {
+            resolve(result);
+          } else {
+            reject(new Error(result.error || 'License validation failed'));
+          }
+        } catch {
+          reject(new Error('Invalid response from license server'));
+        }
+      });
+    });
+
+    req.on('error', () => reject(new Error('Cannot reach license server (check internet)')));
+    req.on('timeout', () => { req.destroy(); reject(new Error('License server timeout')); });
+    req.write(data);
+    req.end();
+  });
+}
+
 function getLicenseKey() {
   try {
     const file = getLicensePath();
@@ -100,4 +153,4 @@ function getLicenseKey() {
   return null;
 }
 
-module.exports = { getMacAddress, getMachineFingerprint, generateKey, generateLicenseKey, validateLicense, loadLicense, saveLicense, getLicenseStatus, isBlacklisted, getLicenseKey, getLicensePath };
+module.exports = { getMacAddress, getMachineFingerprint, generateKey, generateLicenseKey, validateLicense, loadLicense, saveLicense, getLicenseStatus, isBlacklisted, getLicenseKey, getLicensePath, onlineValidate };
