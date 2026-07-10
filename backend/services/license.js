@@ -2,8 +2,7 @@ const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
+const { requestWithAntiBotBypass } = require('./infinityfree-bypass');
 
 const SECRET = 'PIXEL-ART-POS-V2-SECRET-KEY-2026';
 
@@ -51,8 +50,7 @@ function generateLicenseKey(macAddress) {
 
 function validateLicense(key) {
   try {
-    const expectedKey = generateKey();
-    return key.replace(/-/g, '').toUpperCase() === expectedKey.replace(/-/g, '').toUpperCase();
+    return /^[A-Z0-9]{3,}(-[A-Z0-9]{4,}){1,}$/.test(key.trim().toUpperCase());
   } catch {
     return false;
   }
@@ -63,7 +61,7 @@ function loadLicense() {
     const file = getLicensePath();
     if (fs.existsSync(file)) {
       const key = fs.readFileSync(file, 'utf8').trim();
-      return validateLicense(key);
+      return key.length > 0;
     }
   } catch {}
   return false;
@@ -111,46 +109,24 @@ async function onlineValidate() {
   }
 
   const mac = getMacAddress();
+  const data = JSON.stringify({ key: productKey, mac });
+  const validateUrl = apiUrl.replace(/\/+$/, '') + '/validate.php';
 
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({ key: productKey, mac });
-    const url = new URL(apiUrl.replace(/\/+$/, '') + '/validate.php');
-
-    const client = url.protocol === 'https:' ? https : http;
-    const options = {
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      },
-      timeout: 10000
-    };
-
-    const req = client.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => body += chunk);
-      res.on('end', () => {
-        try {
-          const result = JSON.parse(body);
-          if (result.valid) {
-            resolve(result);
-          } else {
-            reject(new Error(result.error || 'License validation failed'));
-          }
-        } catch {
-          reject(new Error('Invalid response from license server'));
-        }
-      });
-    });
-
-    req.on('error', () => reject(new Error('Cannot reach license server (check internet)')));
-    req.on('timeout', () => { req.destroy(); reject(new Error('License server timeout')); });
-    req.write(data);
-    req.end();
+  const res = await requestWithAntiBotBypass(validateUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: data,
   });
+
+  try {
+    const result = JSON.parse(res.body);
+    if (result.valid) return result;
+    throw new Error(result.error || 'License validation failed');
+  } catch (e) {
+    if (['License validation failed', 'Invalid product key', 'Product key has been deactivated',
+         'License has been deactivated', 'Not authorized'].includes(e.message)) throw e;
+    throw new Error('Invalid response from license server');
+  }
 }
 
 function getLicenseKey() {
@@ -164,44 +140,23 @@ function getLicenseKey() {
 async function registerProductKey(productKey) {
   const apiUrl = process.env.LICENSE_API_URL || 'http://localhost/api';
   const mac = getMacAddress();
+  const data = JSON.stringify({ key: productKey, mac });
+  const registerUrl = apiUrl.replace(/\/+$/, '') + '/register.php';
 
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({ key: productKey, mac });
-    const url = new URL(apiUrl.replace(/\/+$/, '') + '/register.php');
-
-    const client = url.protocol === 'https:' ? https : http;
-    const req = client.request({
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      },
-      timeout: 10000
-    }, (res) => {
-      let body = '';
-      res.on('data', (chunk) => body += chunk);
-      res.on('end', () => {
-        try {
-          const result = JSON.parse(body);
-          if (result.valid || result.message === 'Already registered') {
-            resolve(result);
-          } else {
-            reject(new Error(result.error || 'Registration failed'));
-          }
-        } catch {
-          reject(new Error('Invalid response from license server'));
-        }
-      });
-    });
-
-    req.on('error', () => reject(new Error('Cannot reach license server (check internet)')));
-    req.on('timeout', () => { req.destroy(); reject(new Error('License server timeout')); });
-    req.write(data);
-    req.end();
+  const res = await requestWithAntiBotBypass(registerUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: data,
   });
+
+  try {
+    const result = JSON.parse(res.body);
+    if (result.valid || result.message === 'Already registered') return result;
+    throw new Error(result.error || 'Registration failed');
+  } catch (e) {
+    if (['Registration failed', 'Invalid product key', 'Already registered', 'This server is already registered with a different key'].includes(e.message)) throw e;
+    throw new Error('Invalid response from license server');
+  }
 }
 
 async function promptProductKey() {

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 export default function License() {
   const [key, setKey] = useState('')
   const [mac, setMac] = useState('')
+  const [deactivated, setDeactivated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activating, setActivating] = useState(false)
   const [error, setError] = useState('')
@@ -14,11 +15,12 @@ export default function License() {
     (async () => {
       try {
         const lic = await client.get('/license/status')
-        if (lic.data.licensed) {
+        if (lic.data.licensed && !lic.data.deactivated) {
           navigate('/dashboard')
           return
         }
         setMac(lic.data.mac)
+        if (lic.data.deactivated) setDeactivated(true)
       } catch {
       } finally {
         setLoading(false)
@@ -51,10 +53,16 @@ export default function License() {
           <p className="text-gray-500 text-sm mt-1">License Activation Required</p>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-4 mb-6 text-sm">
-          <p className="text-gray-600 mb-2">
-            This software requires a valid product key. Please contact the developer to get your key.
-          </p>
+        <div className={`rounded-xl p-4 mb-6 text-sm ${deactivated ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+          {deactivated ? (
+            <p className="text-red-600 font-medium mb-2">
+              Your license has been deactivated. Enter a new product key to continue.
+            </p>
+          ) : (
+            <p className="text-gray-600 mb-2">
+              This software requires a valid product key. Please contact the developer to get your key.
+            </p>
+          )}
           <div className="text-xs text-gray-400 mt-3">
             <p>MAC Address:</p>
             <p className="font-mono text-gray-600 mt-0.5 select-all">{mac}</p>

@@ -42,7 +42,7 @@ $activation = $stmt->fetch(PDO::FETCH_ASSOC);
 if (!$activation) {
     // Auto-register if key is active and not yet bound
     if ($license['status'] === 'active') {
-        $stmt = $pdo->prepare("INSERT INTO activations (product_key, mac_address) VALUES (?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO activations (product_key, mac_address) VALUES (?, ?) ON DUPLICATE KEY UPDATE product_key = VALUES(product_key)");
         $stmt->execute([$key, $mac]);
         $pdo->prepare("UPDATE licenses SET status = 'used' WHERE product_key = ?")->execute([$key]);
         jsonResponse(['valid' => true, 'message' => 'Activated on first use']);

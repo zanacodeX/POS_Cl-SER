@@ -39,13 +39,20 @@ $stmt->execute([$mac]);
 $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($existing) {
-    if ($existing['product_key'] !== $key) {
-        jsonResponse(['error' => 'This server is already registered with a different key'], 403);
+    if ($existing['product_key'] === $key) {
+        jsonResponse([
+            'valid' => true,
+            'message' => 'Already registered',
+            'company' => $existing['company_name']
+        ]);
     }
+    // Same PC, different key — update the binding
+    $stmt = $pdo->prepare("UPDATE activations SET product_key = ? WHERE mac_address = ?");
+    $stmt->execute([$key, $mac]);
+    $pdo->prepare("UPDATE licenses SET status = 'used' WHERE product_key = ?")->execute([$key]);
     jsonResponse([
         'valid' => true,
-        'message' => 'Already registered',
-        'company' => $existing['company_name']
+        'message' => 'Re-registered with new key'
     ]);
 }
 

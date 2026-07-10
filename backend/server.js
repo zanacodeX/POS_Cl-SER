@@ -105,6 +105,8 @@ async function start(port) {
   if (process.env.SKIP_LICENSE !== 'true') {
     try {
       await onlineValidate();
+      // Save locally so requireLicense middleware can verify it
+      if (process.env.PRODUCT_KEY) saveLicense(process.env.PRODUCT_KEY);
       console.log('  ✓ License validated online');
     } catch (err) {
       if (err.message === 'PRODUCT_KEY_NOT_SET') {
@@ -124,6 +126,10 @@ async function start(port) {
           console.error('  Check that the key is correct and internet is available.\n');
           process.exit(1);
         }
+      } else if (err.message.includes('deactivated') || err.message.includes('Deactivated')) {
+        console.error(`\n\x1b[33m⚠ License Deactivated!\x1b[0m`);
+        console.error(`  ${err.message}`);
+        console.error(`  The app will start in limited mode — contact support to reactivate.\n`);
       } else {
         console.error(`\n\x1b[31m⚠ License Validation Failed!\x1b[0m`);
         console.error(`  ${err.message}`);
